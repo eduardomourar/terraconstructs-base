@@ -8,28 +8,13 @@ import * as iam from "../../../src/aws/iam";
 import * as storage from "../../../src/aws/storage";
 import { Template } from "../../assertions";
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const providerConfig = { region: "us-east-1" };
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-
 describe("Bucket", () => {
   let app: App;
   let stack: AwsStack;
 
   beforeEach(() => {
     app = Testing.app();
-    stack = new AwsStack(app, "TestStack", {
-      environmentName,
-      gridUUID,
-      providerConfig,
-      gridBackendConfig,
-      // TODO: Should support passing account via Stack props?
-      // account: "1234",
-      // region: "us-east-1",
-    });
+    stack = new AwsStack(app);
   });
 
   // test("With KMS_MANAGED encryption", () => {
@@ -96,7 +81,7 @@ describe("Bucket", () => {
       resource: {
         aws_s3_bucket: {
           MyBucket_F68F3FF0: {
-            bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+            bucket_prefix: "grid-mybucket",
           },
         },
         aws_s3_bucket_policy: {
@@ -170,7 +155,7 @@ describe("Bucket", () => {
       resource: {
         aws_s3_bucket: {
           MyBucket_F68F3FF0: {
-            bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+            bucket_prefix: "grid-mybucket",
           },
         },
         aws_s3_bucket_policy: {
@@ -212,7 +197,7 @@ describe("Bucket", () => {
       resource: {
         aws_s3_bucket: {
           MyBucket_F68F3FF0: {
-            bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+            bucket_prefix: "grid-mybucket",
           },
         },
         aws_s3_bucket_versioning: {
@@ -338,7 +323,7 @@ describe("Bucket", () => {
         resource: {
           aws_s3_bucket: {
             MyBucket_F68F3FF0: {
-              bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+              bucket_prefix: "grid-mybucket",
             },
           },
           aws_s3_bucket_policy: {
@@ -453,12 +438,12 @@ describe("Bucket", () => {
             MyRole_F48FFE04: {
               assume_role_policy:
                 "${data.aws_iam_policy_document.MyRole_AssumeRolePolicy_4BED951C.json}",
-              name_prefix: "123e4567-e89b-12d3-TestStackMyRole",
+              name_prefix: "Grid-MyRole",
             },
           },
           aws_iam_role_policy: {
             MyRole_DefaultPolicy_ResourceRoles0_B7F96EAE: {
-              name: "TestStackMyRoleDefaultPolicy70AEE1C2",
+              name: "MyRoleDefaultPolicy6791FE0A",
               policy:
                 "${data.aws_iam_policy_document.MyRole_DefaultPolicy_6017B917.json}",
               role: "${aws_iam_role.MyRole_F48FFE04.name}",
@@ -466,7 +451,7 @@ describe("Bucket", () => {
           },
           aws_s3_bucket: {
             MyBucket_F68F3FF0: {
-              bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+              bucket_prefix: "grid-mybucket",
             },
           },
         },
@@ -518,12 +503,12 @@ describe("Bucket", () => {
               MyRole_F48FFE04: {
                 assume_role_policy:
                   "${data.aws_iam_policy_document.MyRole_AssumeRolePolicy_4BED951C.json}",
-                name_prefix: "123e4567-e89b-12d3-TestStackMyRole",
+                name_prefix: "Grid-MyRole",
               },
             },
             aws_iam_role_policy: {
               MyRole_DefaultPolicy_ResourceRoles0_B7F96EAE: {
-                name: "TestStackMyRoleDefaultPolicy70AEE1C2",
+                name: "MyRoleDefaultPolicy6791FE0A",
                 policy:
                   "${data.aws_iam_policy_document.MyRole_DefaultPolicy_6017B917.json}",
                 role: "${aws_iam_role.MyRole_F48FFE04.name}",
@@ -531,7 +516,7 @@ describe("Bucket", () => {
             },
             aws_s3_bucket: {
               MyBucket_F68F3FF0: {
-                bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+                bucket_prefix: "grid-mybucket",
               },
             },
           },
@@ -581,7 +566,7 @@ describe("Bucket", () => {
           resource: {
             aws_s3_bucket: {
               MyBucket_F68F3FF0: {
-                bucket_prefix: "123e4567-e89b-12d3-teststackmybucket",
+                bucket_prefix: "grid-mybucket",
               },
             },
             aws_s3_bucket_policy: {

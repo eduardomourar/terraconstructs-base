@@ -37,19 +37,11 @@ import { Template } from "../../assertions";
 let stack: AwsStack;
 let app: App;
 
-const environmentName = "test-env";
-const gridUUID = "123e4567-e89b-12d3";
-const providerConfig = { region: "us-east-1" };
-
 const terraformResourceType = "test_resource";
 
 beforeEach(() => {
   app = Testing.app();
-  stack = new AwsStack(app, "MyStack", {
-    environmentName,
-    gridUUID,
-    providerConfig,
-  });
+  stack = new AwsStack(app);
 });
 
 describe("restapi", () => {
@@ -89,9 +81,9 @@ describe("restapi", () => {
       resource: {
         aws_api_gateway_rest_api: {
           "my-api_4C7BF186": {
-            name: "MyStackmyapi08331C67", // TODO: prefix with GridUUID?
+            name: "myapi", // TODO: prefix with GridUUID?
             tags: {
-              Name: "test-env-my-api",
+              Name: "Default-my-api",
             },
           },
         },
@@ -126,7 +118,7 @@ describe("restapi", () => {
             },
             rest_api_id: "${aws_api_gateway_rest_api.my-api_4C7BF186.id}",
             triggers: {
-              redeployment: "38873769fd4fbbc3b46f41ed9136d39a",
+              redeployment: "28bffbcdfbe925213ab700180158278f",
             },
           },
         },
@@ -138,7 +130,7 @@ describe("restapi", () => {
             rest_api_id: "${aws_api_gateway_rest_api.my-api_4C7BF186.id}",
             stage_name: "prod",
             tags: {
-              Name: "test-env-my-api",
+              Name: "Default-my-api",
             },
           },
         },
@@ -156,9 +148,9 @@ describe("restapi", () => {
             managed_policy_arns: [
               "arn:${data.aws_partition.Partitition.partition}:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs",
             ],
-            name_prefix: "123e4567-e89b-12d3-y-apiCloudWatchRole",
+            name_prefix: "Grid-my-apiCloudWatchRole",
             tags: {
-              Name: "test-env-my-api",
+              Name: "Default-my-api",
             },
           },
         },
@@ -176,7 +168,7 @@ describe("restapi", () => {
     // THEN
     const template = new Template(stack);
     // THEN
-    expect(myapi.restApiName).toEqual("MyStackmyapi925B69AF"); // Node Path unique name
+    expect(myapi.restApiName).toEqual("myapi"); // Node Path unique name
     expect(yourapi.restApiName).toEqual("namedapi");
   });
 
@@ -201,9 +193,9 @@ describe("restapi", () => {
       apiGatewayRestApi.ApiGatewayRestApi,
       {
         // Name will be prefixed by stack details
-        name: "MyStackrestapi8D923C39",
+        name: "restapi",
         tags: expect.objectContaining({
-          Name: "test-env-restapi",
+          Name: "Default-restapi",
         }),
       },
     );
@@ -906,7 +898,7 @@ ${stack.resolve(api.restApiId)}/stage/method/path`.replace(/\n/g, ""),
 
     // THEN
     Template.expectOutput(stack, "myapiOutputs").toMatchObject({
-      description: "Outputs for test-env-myapi",
+      description: "Outputs for Default-myapi",
       value: {
         restApiName: stack.resolve(api.restApiName), //"MyStackmyapi925B69AF",
         restApiId: stack.resolve(api.restApiId),
@@ -1023,18 +1015,10 @@ ${stack.resolve(api.restApiId)}/stage/method/path`.replace(/\n/g, ""),
 
   test.skip("cloudWatchRole must be enabled for specifying specify CloudWatch Role and Account removal policy", () => {
     expect(() => {
-      new apigw.RestApi(
-        new AwsStack(app, "NewStack", {
-          environmentName,
-          gridUUID,
-          providerConfig,
-        }),
-        "myapi",
-        {
-          cloudWatchRole: false,
-          // cloudWatchRoleRemovalPolicy: RemovalPolicy.DESTROY,
-        },
-      );
+      new apigw.RestApi(new AwsStack(app, "NewStack"), "myapi", {
+        cloudWatchRole: false,
+        // cloudWatchRoleRemovalPolicy: RemovalPolicy.DESTROY,
+      });
     }).toThrow(
       /'cloudWatchRole' must be enabled for 'cloudWatchRoleRemovalPolicy' to be applied./,
     );
@@ -1560,7 +1544,7 @@ describe("SpecRestApi", () => {
               actions: ["execute-api:Invoke"],
               effect: "Allow",
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
           ],
@@ -1629,7 +1613,7 @@ describe("SpecRestApi", () => {
               actions: ["execute-api:Invoke"],
               effect: "Allow",
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
             {
@@ -1649,7 +1633,7 @@ describe("SpecRestApi", () => {
                 },
               ],
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
           ],
@@ -1690,7 +1674,7 @@ describe("SpecRestApi", () => {
               actions: ["execute-api:Invoke"],
               effect: "Allow",
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
           ],
@@ -1755,7 +1739,7 @@ describe("SpecRestApi", () => {
               actions: ["execute-api:Invoke"],
               effect: "Allow",
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
             {
@@ -1775,7 +1759,7 @@ describe("SpecRestApi", () => {
                 },
               ],
               resources: [
-                "arn:${data.aws_partition.Partitition.partition}:execute-api:us-east-1:${data.aws_caller_identity.CallerIdentity.account_id}:*",
+                "arn:${data.aws_partition.Partitition.partition}:execute-api:${data.aws_region.Region.name}:${data.aws_caller_identity.CallerIdentity.account_id}:*",
               ],
             },
           ],

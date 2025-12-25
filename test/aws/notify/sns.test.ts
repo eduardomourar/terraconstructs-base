@@ -21,26 +21,13 @@ import * as sns from "../../../src/aws/notify";
 import { Duration } from "../../../src/duration";
 import { Template } from "../../assertions";
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridUUID2 = "123e4567-e89b-12d4";
-const providerConfig = { region: "us-east-1" };
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-
 describe("Topic", () => {
   let app: App;
   let stack: AwsStack;
 
   beforeEach(() => {
     app = Testing.app();
-    stack = new AwsStack(app, "MyStack", {
-      environmentName,
-      gridUUID,
-      providerConfig,
-      gridBackendConfig,
-    });
+    stack = new AwsStack(app);
   });
 
   describe("topic tests", () => {
@@ -107,7 +94,7 @@ describe("Topic", () => {
       const t = new Template(stack);
       t.expect.toHaveResourceWithProperties(snsTopic.SnsTopic, {
         fifo_topic: true,
-        name: "MyStack-MyTopic-DFB2578F.fifo", // Name is auto-generated
+        name: "MyTopic.fifo", // Name is auto-generated
       });
     });
 
@@ -640,12 +627,7 @@ describe("Topic", () => {
 
   test("fromTopicArn", () => {
     // GIVEN
-    const stack2 = new AwsStack(app, "stack2", {
-      environmentName,
-      gridUUID: gridUUID2,
-      providerConfig,
-      gridBackendConfig,
-    });
+    const stack2 = new AwsStack(app, "stack2");
 
     // WHEN
     const imported = sns.Topic.fromTopicArn(
@@ -766,7 +748,6 @@ describe("Topic", () => {
       namespace: "AWS/SNS",
       metricName: "NumberOfMessagesPublished",
       period: Duration.minutes(5),
-      region: "us-east-1",
       statistic: "Sum",
     });
 
@@ -775,7 +756,6 @@ describe("Topic", () => {
       namespace: "AWS/SNS",
       metricName: "PublishSize",
       period: Duration.minutes(5),
-      region: "us-east-1",
       statistic: "Average",
     });
   });
@@ -808,12 +788,7 @@ describe("Topic", () => {
 
   test('if "scope" is defined, subscription will be created under that scope', () => {
     // GIVEN
-    const stack2 = new AwsStack(app, "B", {
-      environmentName,
-      gridUUID: gridUUID2,
-      providerConfig,
-      gridBackendConfig,
-    });
+    const stack2 = new AwsStack(app, "B");
     const topic = new sns.Topic(stack, "Topic");
 
     // WHEN
@@ -836,7 +811,7 @@ describe("Topic", () => {
       {
         // TODO: Figure out cross stack reference resolving?
         topic_arn:
-          "${data.terraform_remote_state.cross-stack-reference-input-MyStack.outputs.cross-stack-output-aws_sns_topicTopic_BFC7AF6Earn}", //stack.resolve(topic.topicArn),
+          "${data.terraform_remote_state.cross-stack-reference-input-Default.outputs.cross-stack-output-aws_sns_topicTopic_BFC7AF6Earn}", //stack.resolve(topic.topicArn),
         protocol: "http",
         endpoint: "http://foo/bar",
       },

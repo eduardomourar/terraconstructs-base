@@ -26,25 +26,9 @@ import { Template } from "../../../assertions";
 let stack: AwsStack;
 let topic: notify.Topic;
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridUUID2 = "123e4567-e89b-12d4"; // for cross-region tests
-const providerConfig = { region: "us-east-1" };
-const gridBackendConfig = {
-  address: "http://localhost:3000/foo",
-};
-const gridBackendConfig2 = {
-  address: "http://localhost:3000/bar",
-};
-
 beforeEach(() => {
   const app = Testing.app();
-  stack = new AwsStack(app, "MyStack", {
-    environmentName,
-    gridUUID,
-    providerConfig,
-    gridBackendConfig,
-  });
+  stack = new AwsStack(app);
   topic = new notify.Topic(stack, "MyTopic", {
     topicName: "topicName",
     displayName: "displayName",
@@ -99,7 +83,7 @@ test("url subscription with user provided dlq", () => {
   t.expect.toHaveResourceWithProperties(sqsQueue.SqsQueue, {
     message_retention_seconds: 1209600,
     // TODO: Fix namePrefix
-    name_prefix: "MySubscription_DLQMyStackDeadLetterQueue",
+    name_prefix: "MySubscription_DLQDeadLetterQueue",
   });
   t.expect.toHaveDataSourceWithProperties(
     dataAwsIamPolicyDocument.DataAwsIamPolicyDocument,
@@ -281,30 +265,16 @@ test("queue subscription", () => {
 test("queue subscription cross region", () => {
   const app = new App();
   const topicStack = new AwsStack(app, "TopicStack", {
-    environmentName,
-    gridBackendConfig,
-    gridUUID,
     providerConfig: {
       region: "us-east-1",
       // account: "11111111111",
     },
-    // env: {
-    //   account: "11111111111",
-    //   region: "us-east-1",
-    // },
   });
   const queueStack = new AwsStack(app, "QueueStack", {
-    environmentName,
-    gridBackendConfig: gridBackendConfig2,
-    gridUUID: gridUUID2,
     providerConfig: {
       region: "us-east-2",
       // account: "11111111111",
     },
-    // env: {
-    //   account: "11111111111",
-    //   region: "us-east-2",
-    // },
   });
 
   const topic1 = new notify.Topic(topicStack, "Topic", {
@@ -1213,18 +1183,8 @@ test("lambda subscription", () => {
 
 test("lambda subscription, cross region env agnostic", () => {
   const app = new App();
-  const topicStack = new AwsStack(app, "TopicStack", {
-    gridBackendConfig,
-    environmentName,
-    gridUUID,
-    providerConfig,
-  });
-  const lambdaStack = new AwsStack(app, "LambdaStack", {
-    gridBackendConfig,
-    environmentName,
-    gridUUID: gridUUID2,
-    providerConfig,
-  });
+  const topicStack = new AwsStack(app, "TopicStack");
+  const lambdaStack = new AwsStack(app, "LambdaStack");
 
   const topic1 = new notify.Topic(topicStack, "Topic", {
     topicName: "topicName",
@@ -1591,7 +1551,7 @@ test("throws with multiple subscriptions of the same subscriber", () => {
   topic.addSubscription(new subs.SqsSubscription(queue));
 
   expect(() => topic.addSubscription(new subs.SqsSubscription(queue))).toThrow(
-    /A subscription with id \".*\" already exists under the scope MyStack\/MyQueue/,
+    /A subscription with id \".*\" already exists under the scope Default\/MyQueue/,
   );
 });
 

@@ -8,16 +8,10 @@ const lambdaProps = {
   handler: "index.handler",
   runtime: compute.Runtime.NODEJS_LATEST,
 };
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-const providerConfig = { region: "us-east-1" };
 describe("Function with Storage", () => {
   test("Should synth and match SnapShot", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     const fn = new compute.LambdaFunction(stack, "HelloWorld", lambdaProps);
     const bucket = new storage.Bucket(stack, "HelloWorldBucket", {
@@ -33,7 +27,7 @@ describe("Function with Storage", () => {
 describe("Function with event rules", () => {
   test("Should handle dependencies on permissions", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     const fn = new compute.LambdaFunction(stack, "HelloWorld", lambdaProps);
     const rule = new notify.Rule(stack, "HelloWorldRule", {
@@ -45,13 +39,3 @@ describe("Function with event rules", () => {
     expect(Testing.synth(stack)).toMatchSnapshot();
   });
 });
-
-function getAwsStack(): AwsStack {
-  const app = Testing.app();
-  return new AwsStack(app, "TestStack", {
-    environmentName,
-    gridUUID,
-    providerConfig,
-    gridBackendConfig,
-  });
-}

@@ -4,16 +4,10 @@ import { AwsStack } from "../../../src/aws/aws-stack";
 import * as notify from "../../../src/aws/notify";
 import { Duration } from "../../../src/duration";
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-const providerConfig = { region: "us-east-1" };
 describe("Queue", () => {
   test("Should synth and match SnapShot", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     new notify.Queue(stack, "HelloWorld");
     // THEN
@@ -22,7 +16,7 @@ describe("Queue", () => {
   });
   test("Should synth and match SnapShot with prefix", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     new notify.Queue(stack, "HelloWorld", {
       namePrefix: "hello-world",
@@ -36,7 +30,7 @@ describe("Queue", () => {
   });
   test("Should synth with DLQ and match SnapShot", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     const deadLetterQueue = new notify.Queue(stack, "DLQ", {
       // encryption: QueueEncryption.KMS_MANAGED, //TODO: Re-add KMS encryption
@@ -58,7 +52,7 @@ describe("Queue", () => {
   });
   test("Should synth with fifo suffix and match SnapShot", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     new notify.Queue(stack, "Queue", {
       namePrefix: "queue.fifo",
@@ -72,7 +66,7 @@ describe("Queue", () => {
   });
   test("Should synth with contentBasedDeduplication and match SnapShot", () => {
     // GIVEN
-    const stack = getAwsStack();
+    const stack = new AwsStack();
     // WHEN
     new notify.Queue(stack, "Queue", {
       // encryption: QueueEncryption.KMS_MANAGED, //TODO: Re-add KMS encryption
@@ -85,13 +79,3 @@ describe("Queue", () => {
     expect(Testing.synth(stack)).toMatchSnapshot();
   });
 });
-
-function getAwsStack(): AwsStack {
-  const app = Testing.app();
-  return new AwsStack(app, "TestStack", {
-    environmentName,
-    gridUUID,
-    providerConfig,
-    gridBackendConfig,
-  });
-}

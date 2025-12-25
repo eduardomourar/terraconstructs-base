@@ -150,7 +150,7 @@ describe("StackBase", () => {
     const parent = new MyStack(root, "Prod");
     const stack = new MyStack(parent, "Stack");
     // THEN
-    expect(stack.gridUUID).toEqual("gProdStack2490AAA8");
+    expect(stack.gridUUID).toEqual("GridProdStack2490AAA8");
   });
   test("generated grid uuid will not exceed 36 characters", () => {
     // WHEN
@@ -159,14 +159,14 @@ describe("StackBase", () => {
     const stack = new MyStack(app, "TooLongWhenCombinedWithOtherStack");
     // THEN
     expect(stack.gridUUID.length).toEqual(36);
-    expect(stack.gridUUID).toEqual("gProdLongStackWithOtherStackB8885317");
+    expect(stack.gridUUID).toEqual("GridProdLongStWithOtherStackB8885317");
   });
   test("stack validation is performed on explicit grid uuid", () => {
     // GIVEN
     const app = new App();
     // THEN
     expect(
-      () => new MyStack(app, "boom", { gridUUID: "invalid:stack:name" }),
+      () => new MyStack(app, "boom", { gridUUID: "invalid:grid:uuid" }),
     ).toThrow(/GridUUID must match the regular expression/);
   });
   test("Stack.of(stack) returns the correct stack", () => {

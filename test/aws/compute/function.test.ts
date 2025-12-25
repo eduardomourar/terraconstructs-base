@@ -5,20 +5,9 @@ import { compute, AwsStack } from "../../../src/aws";
 import { Bucket } from "../../../src/aws/storage/bucket";
 import { Template } from "../../assertions";
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-const DEFAULT_CONFIG = {
-  environmentName,
-  gridUUID,
-  gridBackendConfig,
-};
 const TEST_APPDIR = path.join(__dirname, "fixtures", "app");
 const CDKTFJSON_PATH = path.join(TEST_APPDIR, "cdktf.json");
 
-const providerConfig = { region: "us-east-1" };
 describe("Function", () => {
   let app: App;
   let stack: AwsStack;
@@ -31,10 +20,7 @@ describe("Function", () => {
         },
       }),
     );
-    stack = new AwsStack(app, "TestStack", {
-      ...DEFAULT_CONFIG,
-      providerConfig,
-    });
+    stack = new AwsStack(app);
   });
   test("Should synth and match SnapShot", () => {
     // WHEN
@@ -99,9 +85,7 @@ describe("Function", () => {
 describe("latest Lambda node runtime", () => {
   test("with region agnostic stack", () => {
     // GIVEN
-    const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
-    });
+    const stack = new AwsStack(undefined, "Stack");
 
     // WHEN
     new compute.LambdaFunction(stack, "Lambda", {
@@ -116,10 +100,7 @@ describe("latest Lambda node runtime", () => {
 
   test("with stack in commercial region", () => {
     // GIVEN
-    const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
-      providerConfig,
-    });
+    const stack = new AwsStack(undefined, "Stack");
 
     // WHEN
     new compute.LambdaFunction(stack, "Lambda", {
@@ -142,7 +123,6 @@ describe("latest Lambda node runtime", () => {
   test("with stack in china region", () => {
     // GIVEN
     const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
       providerConfig: {
         region: "cn-north-1",
       },
@@ -169,7 +149,6 @@ describe("latest Lambda node runtime", () => {
   test("with stack in adc region", () => {
     // GIVEN
     const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
       providerConfig: {
         region: "us-iso-east-1",
       },
@@ -196,7 +175,6 @@ describe("latest Lambda node runtime", () => {
   test("with stack in govcloud region", () => {
     // GIVEN
     const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
       providerConfig: {
         region: "us-gov-east-1",
       },
@@ -223,7 +201,6 @@ describe("latest Lambda node runtime", () => {
   test("with stack in unsupported region", () => {
     // GIVEN
     const stack = new AwsStack(undefined, "Stack", {
-      ...DEFAULT_CONFIG,
       providerConfig: {
         region: "us-fake-1",
       },

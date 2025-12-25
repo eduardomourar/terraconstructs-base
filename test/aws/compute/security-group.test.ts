@@ -17,13 +17,6 @@ import {
 } from "../../../src/aws/compute";
 import { Template } from "../../assertions";
 
-const environmentName = "Test";
-const gridUUID = "123e4567-e89b-12d3";
-const gridBackendConfig = {
-  address: "http://localhost:3000",
-};
-const providerConfig = { region: "us-east-1" };
-
 // Defaults to true in TerraConstructs
 // const SECURITY_GROUP_DISABLE_INLINE_RULES_CONTEXT_KEY =
 //   "@aws-cdk/aws-ec2.securityGroupDisableInlineRules";
@@ -34,12 +27,7 @@ describe("security group", () => {
 
   beforeEach(() => {
     app = Testing.app();
-    stack = new AwsStack(app, "TestStack", {
-      environmentName,
-      gridUUID,
-      providerConfig,
-      gridBackendConfig,
-    });
+    stack = new AwsStack(app);
   });
   test("security group can allows all outbound traffic by default", () => {
     // GIVEN
@@ -854,12 +842,7 @@ function testRulesAreInlined(
 
     beforeEach(() => {
       app = Testing.app();
-      stack = new AwsStack(app, "TestStack", {
-        environmentName,
-        gridUUID,
-        providerConfig,
-        gridBackendConfig,
-      });
+      stack = new AwsStack(app, "TestStack");
     });
     test("new SecurityGroup will create an inline SecurityGroupEgress rule to allow all traffic", () => {
       // GIVEN
@@ -1004,12 +987,7 @@ function testRulesAreInlined(
 
     beforeEach(() => {
       app = Testing.app();
-      stack = new AwsStack(app, "TestStack", {
-        environmentName,
-        gridUUID,
-        providerConfig,
-        gridBackendConfig,
-      });
+      stack = new AwsStack(app, "TestStack");
     });
     test("new SecurityGroup rule will create an egress rule that denies all traffic", () => {
       // GIVEN
@@ -1172,12 +1150,7 @@ function testRulesAreNotInlined(
 
     beforeEach(() => {
       app = Testing.app();
-      stack = new AwsStack(app, "TestStack", {
-        environmentName,
-        gridUUID,
-        providerConfig,
-        gridBackendConfig,
-      });
+      stack = new AwsStack(app, "TestStack");
     });
 
     test("new SecurityGroup will create an external SecurityGroupEgress rule", () => {
@@ -1402,12 +1375,7 @@ function testRulesAreNotInlined(
 
     beforeEach(() => {
       app = Testing.app();
-      stack = new AwsStack(app, "TestStack", {
-        environmentName,
-        gridUUID,
-        providerConfig,
-        gridBackendConfig,
-      });
+      stack = new AwsStack(app, "TestStack");
     });
     test("new SecurityGroup rule will create an external egress rule that denies all traffic", () => {
       // GIVEN
