@@ -24,7 +24,7 @@ const TOKEN_RESOLVER = new DefaultTokenResolver(new StringConcat());
 
 const TERRASTACK_SYMBOL = Symbol.for("terraconstructs/lib.Stack");
 
-const VALID_GRID_UUID_REGEX = /^[A-Za-z0-9-]*$/;
+const VALID_GRID_UUID_REGEX = /^[A-Za-z][A-Za-z0-9-]*$/;
 
 // https://github.com/aws/aws-cdk/blob/v2.156.0/packages/aws-cdk-lib/core/lib/names.ts
 
@@ -244,7 +244,7 @@ export abstract class StackBase extends TerraformStack implements IStack {
 
     super(scope, id);
     this._environmentName = props.environmentName ?? "Default";
-    this._gridUUID = props.gridUUID ?? this.generateGridUuid(this, "g");
+    this._gridUUID = props.gridUUID ?? this.generateGridUuid(this, "Grid");
     if (this.gridUUID.length > 36) {
       throw new ValidationError(
         `GridUUID must be <= 36 characters. GridUUID: '${this.gridUUID}'`,
@@ -427,5 +427,5 @@ function makeGridUuid(components: string[], prefix: string = "") {
       return gridUuid;
     }
   }
-  return makeUniqueResourceName(components, { maxLength: 36, prefix: prefix });
+  return makeUniqueResourceName(components, { maxLength: 36, prefix });
 }
