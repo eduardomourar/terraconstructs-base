@@ -17,11 +17,17 @@ import { Template } from "../../../assertions";
 const TEST_OUTDIR = path.join(__dirname, "cdk.out");
 const TEST_APPDIR = path.join(__dirname, "fixtures", "app");
 const CDKTFJSON_PATH = path.join(TEST_APPDIR, "cdktf.json");
-
-// this is hardcoded in the AssetStaging class:
-const TEST_STAGINGDIR = path.join(TEST_APPDIR, "cdktf.out", "assets");
 // const DEMO_IMAGE_ASSET_HASH =
 //   "0a3355be12051c9984bf2b0b2bba4e6ea535968e5b6e7396449701732fe5ed14";
+
+// cdktn's AssetStaging defers writing staged content to disk until the
+// owning stack synthesizes (`app.synth()`), landing it at
+// `<outdir>/stacks/<stackId>/<TerraformAsset.path>` -- unlike
+// `Template.synth(stack)`/`new Template(stack)`, which only produce the
+// in-memory JSON template and never trigger that write.
+function stagedDir(app: App, stack: AwsStack, image: DockerImageAsset): string {
+  return path.join(TEST_OUTDIR, "stacks", stack.node.id, image.assetPath);
+}
 
 describe("image asset", () => {
   let app: App;
@@ -71,18 +77,17 @@ describe("image asset", () => {
       directory: path.join(__dirname, "demo-image"),
     });
 
+    // `Template`/`Testing.synth` only produce the in-memory JSON template;
+    // a real `app.synth()` is needed to actually trigger staging to disk.
+    app.synth();
     const template = new Template(stack);
 
     // ensure files are staged
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "Dockerfile"),
-      ),
+      fs.existsSync(path.join(stagedDir(app, stack, image), "Dockerfile")),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "index.py"),
-      ),
+      fs.existsSync(path.join(stagedDir(app, stack, image), "index.py")),
     ).toBe(true);
     // TODO: ensure docker provider ECR Auth config
     // ensure asset repo is created on demand
@@ -136,74 +141,49 @@ describe("image asset", () => {
       directory: path.join(__dirname, "allow-listed-image"),
     });
 
+    // `Template.synth` only produces the in-memory JSON template; a real
+    // `app.synth()` is needed to actually trigger staging to disk.
+    app.synth();
     Template.synth(stack).toBeDefined();
 
     // Only the files exempted above should be included.
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, ".dockerignore"),
-      ),
+      fs.existsSync(path.join(stagedDir(app, stack, image), ".dockerignore")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(stagedDir(app, stack, image), "Dockerfile")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(stagedDir(app, stack, image), "index.py")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(stagedDir(app, stack, image), "foobar.txt")),
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(stagedDir(app, stack, image), "subdirectory")),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "Dockerfile"),
+        path.join(stagedDir(app, stack, image), "subdirectory", "baz.txt"),
       ),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "index.py"),
-      ),
+      !fs.existsSync(path.join(stagedDir(app, stack, image), "node_modules")),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "foobar.txt"),
-      ),
-    ).toBe(true);
-    expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "subdirectory"),
-      ),
-    ).toBe(true);
-    expect(
-      fs.existsSync(
-        path.join(
-          TEST_STAGINGDIR,
-          `asset.${image.assetHash}`,
-          "subdirectory",
-          "baz.txt",
-        ),
+      !fs.existsSync(
+        path.join(stagedDir(app, stack, image), "node_modules", "one"),
       ),
     ).toBe(true);
     expect(
       !fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "node_modules"),
+        path.join(stagedDir(app, stack, image), "node_modules", "some_dep"),
       ),
     ).toBe(true);
     expect(
       !fs.existsSync(
         path.join(
-          TEST_STAGINGDIR,
-          `asset.${image.assetHash}`,
-          "node_modules",
-          "one",
-        ),
-      ),
-    ).toBe(true);
-    expect(
-      !fs.existsSync(
-        path.join(
-          TEST_STAGINGDIR,
-          `asset.${image.assetHash}`,
-          "node_modules",
-          "some_dep",
-        ),
-      ),
-    ).toBe(true);
-    expect(
-      !fs.existsSync(
-        path.join(
-          TEST_STAGINGDIR,
-          `asset.${image.assetHash}`,
+          stagedDir(app, stack, image),
           "node_modules",
           "some_dep",
           "file",
@@ -398,18 +378,17 @@ describe("with existing repository", () => {
       directory: path.join(__dirname, "demo-image"),
     });
 
+    // `Template`/`Testing.synth` only produce the in-memory JSON template;
+    // a real `app.synth()` is needed to actually trigger staging to disk.
+    app.synth();
     const template = new Template(stack);
 
     // ensure files are staged
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "Dockerfile"),
-      ),
+      fs.existsSync(path.join(stagedDir(app, stack, image), "Dockerfile")),
     ).toBe(true);
     expect(
-      fs.existsSync(
-        path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "index.py"),
-      ),
+      fs.existsSync(path.join(stagedDir(app, stack, image), "index.py")),
     ).toBe(true);
     // ensure asset repo is not created by the stack
     template.expect.not.toHaveResource(ecrRepository.EcrRepository);
@@ -498,38 +477,23 @@ function testDockerDirectoryIsStagedWithoutFilesSpecifiedInExcludeOption(
   app.synth();
 
   expect(
-    fs.existsSync(
-      path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, ".dockerignore"),
-    ),
+    fs.existsSync(path.join(stagedDir(app, stack, image), ".dockerignore")),
   ).toBe(true);
   expect(
-    fs.existsSync(
-      path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "Dockerfile"),
-    ),
+    fs.existsSync(path.join(stagedDir(app, stack, image), "Dockerfile")),
   ).toBe(true);
   expect(
-    fs.existsSync(
-      path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "index.py"),
-    ),
+    fs.existsSync(path.join(stagedDir(app, stack, image), "index.py")),
   ).toBe(true);
   expect(
-    !fs.existsSync(
-      path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "foobar.txt"),
-    ),
+    !fs.existsSync(path.join(stagedDir(app, stack, image), "foobar.txt")),
+  ).toBe(true);
+  expect(
+    !fs.existsSync(path.join(stagedDir(app, stack, image), "subdirectory")),
   ).toBe(true);
   expect(
     !fs.existsSync(
-      path.join(TEST_STAGINGDIR, `asset.${image.assetHash}`, "subdirectory"),
-    ),
-  ).toBe(true);
-  expect(
-    !fs.existsSync(
-      path.join(
-        TEST_STAGINGDIR,
-        `asset.${image.assetHash}`,
-        "subdirectory",
-        "baz.txt",
-      ),
+      path.join(stagedDir(app, stack, image), "subdirectory", "baz.txt"),
     ),
   ).toBe(true);
 }

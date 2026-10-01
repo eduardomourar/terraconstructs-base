@@ -113,7 +113,7 @@ describe("build cache", () => {
     template.expect.toHaveResourceWithProperties(dockerImage.Image, {
       build: {
         builder: "default",
-        context: `assets/DockerAsset/${asset.assetHash}`,
+        context: `assets/DockerImage6_Staging_8F40BA79/${asset.assetHash}`,
       },
       triggers: {
         dir_sha1: asset.assetHash,

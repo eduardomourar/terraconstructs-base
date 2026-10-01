@@ -1,41 +1,51 @@
 // https://github.com/aws/aws-cdk/blob/v2.186.0/packages/aws-cdk-lib/core/lib/bundling.ts
 
-// Re-export core bundling types from cdktn
-export {
-  type BundlingOptions,
-  BundlingOutput,
-  BundlingFileAccess,
+import {
   DockerImage,
-  DockerVolumeConsistency,
-} from "cdktn";
-export type { ILocalBundling, DockerRunOptions, DockerVolume } from "cdktn";
+  DockerBuildSecret,
+  BundlingFileAccess,
+  DockerBundler,
+} from "@cdktn/bundler-docker";
+import type {
+  DockerRunOptions,
+  DockerVolume,
+  DockerBundlerProps,
+  DockerBuildOptions,
+} from "@cdktn/bundler-docker";
+import { LocalBundler, BundlingOutput } from "@cdktn/bundler-local";
+import type { LocalBundlerProps } from "@cdktn/bundler-local";
+import { BundlerKey, BundleResult } from "cdktn";
+import type { IAssetBundler, BundleOptions } from "cdktn";
 
-import type { DockerBuildOptions as CdktnDockerBuildOptions } from "cdktn";
-import { DockerImage } from "cdktn";
-import { DockerCacheOption } from "./assets";
-
-/**
- * Methods to build Docker CLI arguments for builds using secrets.
- *
- * Docker BuildKit must be enabled to use build secrets.
- *
- * @see https://docs.docker.com/build/buildkit/
- */
-export class DockerBuildSecret {
-  /**
-   * A Docker build secret from a file source
-   * @param src The path to the source file, relative to the build directory.
-   * @returns The latter half required for `--secret`
-   */
-  public static fromSrc(src: string): string {
-    return `src=${src}`;
-  }
-}
+// Re-export the current cdktn bundling model -- `DockerImage`,
+// `DockerBundler`, `LocalBundler` and friends now live in
+// `@cdktn/bundler-docker`/`@cdktn/bundler-local` and already implement it
+// (returning a `BundleResult` from `bundle()`), so TerraConstructs just
+// forwards them rather than wrapping or reimplementing.
+export {
+  DockerImage,
+  DockerBuildSecret,
+  BundlingFileAccess,
+  DockerBundler,
+  LocalBundler,
+  BundlingOutput,
+  BundlerKey,
+  BundleResult,
+};
+export type {
+  DockerRunOptions,
+  DockerVolume,
+  DockerBundlerProps,
+  DockerBuildOptions,
+  LocalBundlerProps,
+  IAssetBundler,
+  BundleOptions,
+};
 
 /**
  * A Docker image used for asset bundling
  *
- * @deprecated use DockerImage from cdktn
+ * @deprecated use DockerImage from `@cdktn/bundler-docker`
  */
 export class BundlingDockerImage {
   /**
@@ -61,23 +71,4 @@ export class BundlingDockerImage {
   ): DockerImage {
     return DockerImage.fromBuild(path, options);
   }
-}
-
-/**
- * Docker build options - extends cdktn's DockerBuildOptions with AWS-specific cache options
- */
-export interface DockerBuildOptions extends CdktnDockerBuildOptions {
-  /**
-   * Cache from options to pass to the `docker build` command.
-   *
-   * @default - no cache from args are passed
-   */
-  readonly cacheFrom?: DockerCacheOption[];
-
-  /**
-   * Cache to options to pass to the `docker build` command.
-   *
-   * @default - no cache to args are passed
-   */
-  readonly cacheTo?: DockerCacheOption;
 }

@@ -1,261 +1,242 @@
-// TerraConstructs-specific AssetStaging that uses SHA256 hashing
-// Uses cdktn's AssetStaging with custom hash calculation for AWS compatibility
-// and proper Docker ignore pattern support including negation patterns
+// TerraConstructs-specific SHA256 asset hashing, layered on top of cdktn's
+// TerraformAsset/AssetStaging (which hash with MD5 by default) to maintain
+// AWS CDK hash compatibility.
+//
+// cdktn's `AssetStaging` defers writing staged content to disk until the
+// owning stack's synth-time `onSynthesize` pass, and no longer exposes an
+// eagerly-available staged path -- only `TerraformAsset` (which owns and
+// drives an internal `AssetStaging`) is a safe public integration point.
+// TerraConstructs' `Asset`/`DockerImageAsset` constructs build directly on
+// `TerraformAsset`, using `resolveSha256AssetHash` below to compute (and,
+// for `OUTPUT` hashing, override after construction) a SHA256 `assetHash`
+// instead of cdktn's own MD5 one.
 
 import * as crypto from "crypto";
 import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
-import { AssetStaging as CdktnAssetStaging, AssetHashType } from "cdktn";
-import type { AssetStagingProps } from "cdktn";
-import { Construct } from "constructs";
-import { FileSystem, IgnoreMode } from "./fs";
+import {
+  AssetHashType,
+  AssetPackaging,
+  TerraformAsset,
+  AssetType,
+  BundleResult,
+  BundleOutputType,
+} from "cdktn";
+import type {
+  IAsset,
+  IAssetBundler,
+  BundleOptions,
+  IAssetPackaging,
+} from "cdktn";
+import { FileSystem } from "./fs";
+
+export { AssetPackaging, TerraformAsset, AssetType };
+export type { IAssetPackaging };
 
 /**
- * Cache for OUTPUT hash type bundling results.
- * Key: source hash (hash of source + bundling options)
- * Value: { outputHash: string, stagedPath: string }
+ * Cache for OUTPUT hash type bundling results, keyed by bundler identity +
+ * source path + exclude + extraHash.
+ *
+ * Avoids re-running an identical bundle for every asset that references the
+ * same source and bundler within a synth: a cache hit copies the
+ * previously-produced output directory instead of re-invoking the bundler,
+ * so the staged bytes always match what was actually hashed (unlike a
+ * hash-only cache, which can leave a second instance staging unbundled
+ * source under a hash computed from bundled output).
  */
-const OUTPUT_HASH_CACHE = new Map<
+const OUTPUT_BUNDLE_CACHE = new Map<
   string,
-  { outputHash: string; stagedPath: string }
+  {
+    readonly sha256: string;
+    readonly storedPath: string;
+    readonly outputType: BundleOutputType;
+  }
 >();
 
+function sha256(input: string): string {
+  return crypto.createHash("sha256").update(input).digest("hex");
+}
+
 /**
- * TerraConstructs AssetStaging with SHA256 hashing for AWS compatibility.
- *
- * Uses cdktn's AssetStaging with custom SHA256 hashing (via customHash extension point)
- * instead of cdktn's default MD5 uppercase to maintain compatibility with AWS CDK.
+ * Wraps a user-supplied bundler for `OUTPUT` hashing: dedups identical
+ * builds via `OUTPUT_BUNDLE_CACHE` and captures a SHA256 fingerprint of the
+ * produced directory (AWS CDK compatibility; cdktn's own `assetHash` is
+ * MD5-based) for the caller to read back once `bundle()` has run.
  */
-export class AssetStaging extends CdktnAssetStaging {
-  /**
-   * Validate props for AWS CDK compatibility
-   */
-  private static validateProps(props: AssetStagingProps): void {
-    const hashType = props.assetHashType;
-    const customHash = props.assetHash;
-    const bundling = props.bundling;
+class CapturingOutputBundler implements IAssetBundler {
+  public readonly bundlerKey?: string;
+  private hash?: string;
 
-    // Only validate if hashType is specified
-    if (!hashType) {
-      return;
-    }
-
-    // Validate that assetHash and assetHashType are compatible
-    if (customHash && hashType !== AssetHashType.CUSTOM) {
-      throw new Error(
-        `Cannot specify \`${hashType}\` for \`assetHashType\` when \`assetHash\` is specified. Use \`AssetHashType.CUSTOM\` or leave undefined.`,
-      );
-    }
-
-    // Validate OUTPUT hash type requires bundling
-    if (hashType === AssetHashType.OUTPUT && !bundling) {
-      throw new Error(
-        "Cannot use `output` hash type when `bundling` is not specified.",
-      );
-    }
-
-    // BUNDLE is deprecated alias for OUTPUT (check as string since it may not exist in enum)
-    if ((hashType as string) === "bundle" && !bundling) {
-      throw new Error(
-        "Cannot use `bundle` hash type when `bundling` is not specified.",
-      );
-    }
+  constructor(
+    private readonly inner: IAssetBundler,
+    private readonly cacheKey: string,
+  ) {
+    this.bundlerKey = inner.bundlerKey;
   }
 
-  /**
-   * Calculate SHA256 hash for the asset (AWS CDK compatible).
-   * This maintains the same hashing behavior as AWS CDK.
-   */
-  private static calculateSha256Hash(props: AssetStagingProps): string {
-    const sourcePath = path.resolve(props.sourcePath);
-
-    // Use FileSystem.fingerprint for SHA256 hashing
-    const fingerprintOptions = {
-      exclude: props.exclude,
-      extraHash: props.extraHash,
-    };
-
-    return FileSystem.fingerprint(sourcePath, fingerprintOptions);
+  public get capturedHash(): string | undefined {
+    return this.hash;
   }
 
-  /**
-   * Helper to create a SHA256 hash from a string
-   */
-  private static sha256(input: string): string {
-    return crypto.createHash("sha256").update(input).digest("hex");
-  }
-
-  constructor(scope: Construct, id: string, props: AssetStagingProps) {
-    // Validate hash type and bundling combinations
-    AssetStaging.validateProps(props);
-
-    // Determine the hash type to use
-    const hashType =
-      props.assetHashType ??
-      (props.assetHash ? AssetHashType.CUSTOM : AssetHashType.SOURCE);
-
-    // For OUTPUT hash type, we need special handling:
-    // 1. Create a cache key from source path + bundling options (no fingerprinting)
-    // 2. Check if we've already bundled this exact combination
-    // 3. If yes, reuse the cached output hash without bundling again
-    // 4. If no, bundle and cache the result
-    if (hashType === AssetHashType.OUTPUT && props.bundling) {
-      // Calculate a cache key: source path + bundling options (no fingerprinting for cache key)
-      const sourcePath = path.resolve(props.sourcePath);
-
-      // Create a stable key from source path + bundling options + excludes + extraHash
-      const cacheKey = AssetStaging.sha256(
-        JSON.stringify({
-          sourcePath,
-          exclude: props.exclude,
-          extraHash: props.extraHash,
-          bundling: {
-            image: props.bundling.image.toJSON(),
-            command: props.bundling.command,
-            entrypoint: props.bundling.entrypoint,
-            environment: props.bundling.environment,
-            workingDirectory: props.bundling.workingDirectory,
-            user: props.bundling.user,
-            network: props.bundling.network,
-            platform: props.bundling.platform,
-            securityOpt: props.bundling.securityOpt,
-            outputType: props.bundling.outputType,
-          },
-        }),
-      );
-
-      // Check cache
-      const cached = OUTPUT_HASH_CACHE.get(cacheKey);
-      if (cached) {
-        // Use cached result - pass the already-hashed output directly to cdktn
-        // We use SOURCE hash type here to prevent cdktn from re-hashing,
-        // but provide our pre-calculated hash
-        super(scope, id, {
-          ...props,
-          assetHash: cached.outputHash,
-          assetHashType: AssetHashType.CUSTOM,
-          bundling: undefined, // Skip bundling since we have cached result
-        });
-        return;
-      }
-
-      // Not in cache - let cdktn bundle and then calculate SHA256 of output
-      super(scope, id, {
-        ...props,
-        assetHashType: AssetHashType.OUTPUT,
-      });
-
-      // Calculate SHA256 of the bundled output
-      const sha256Hash = FileSystem.fingerprint(this.absoluteStagedPath, {
-        exclude: props.exclude,
-        extraHash: props.extraHash,
-      });
-
-      // Cache the result for future use
-      OUTPUT_HASH_CACHE.set(cacheKey, {
-        outputHash: sha256Hash,
-        stagedPath: this.absoluteStagedPath,
-      });
-
-      // Update the hash to SHA256
-      Object.defineProperty(this, "assetHash", {
-        value: sha256Hash,
-        writable: false,
-        enumerable: true,
-        configurable: true,
-      });
-
-      return;
-    }
-
-    // Handle CUSTOM hash type - AWS CDK hashes the custom value with SHA256
-    if (hashType === AssetHashType.CUSTOM) {
-      if (!props.assetHash) {
-        throw new Error(
-          "`assetHash` must be specified when `assetHashType` is set to `AssetHashType.CUSTOM`.",
+  public bundle(options: BundleOptions): BundleResult {
+    const cached = OUTPUT_BUNDLE_CACHE.get(this.cacheKey);
+    if (cached) {
+      this.hash = cached.sha256;
+      if (cached.outputType === BundleOutputType.FILE) {
+        const dest = path.join(
+          options.outputDir,
+          path.basename(cached.storedPath),
         );
+        fs.copyFileSync(cached.storedPath, dest);
+        return BundleResult.file(dest);
       }
-      // AWS CDK hashes the custom value with SHA256
-      const hashedCustom = AssetStaging.sha256(props.assetHash);
-      super(scope, id, {
-        ...props,
-        assetHash: hashedCustom,
-        assetHashType: AssetHashType.CUSTOM,
-      });
-      return;
+      FileSystem.copyDirectory(cached.storedPath, options.outputDir);
+      return BundleResult.directory(options.outputDir);
     }
 
-    // For SOURCE hash type (default), calculate SHA256 hash for AWS compatibility
-    const sha256Hash = AssetStaging.calculateSha256Hash(props);
+    const result = this.inner.bundle(options);
+    if (result.isDeclined) {
+      return result;
+    }
 
-    // Pass to cdktn with custom hash
-    super(scope, id, {
-      ...props,
-      assetHash: sha256Hash,
-      assetHashType: AssetHashType.CUSTOM,
-    });
+    const produced = result.path!;
+    const digest = FileSystem.fingerprint(produced);
 
-    // Re-stage with proper Docker ignore pattern support if needed
-    this.stageWithDockerIgnore(
-      path.resolve(props.sourcePath),
-      this.absoluteStagedPath,
-      props,
+    const scratch = fs.mkdtempSync(
+      path.join(os.tmpdir(), "tcons-bundle-cache-"),
     );
-  }
-
-  /**
-   * Stage files with proper Docker ignore pattern support.
-   * This is called after CDKTN's staging to ensure proper file filtering with negation patterns.
-   */
-  private stageWithDockerIgnore(
-    sourcePath: string,
-    stagedPath: string,
-    props: AssetStagingProps,
-  ): void {
-    // Check if we need to re-stage with proper Docker ignore handling
-    const needsDockerIgnore =
-      props.exclude && props.exclude.some((pattern) => pattern.startsWith("!"));
-
-    if (!needsDockerIgnore) {
-      // No negation patterns, CDKTN's staging is fine
-      return;
+    let storedPath: string;
+    if (result.outputType === BundleOutputType.FILE) {
+      storedPath = path.join(scratch, path.basename(produced));
+      fs.copyFileSync(produced, storedPath);
+    } else {
+      storedPath = scratch;
+      FileSystem.copyDirectory(produced, storedPath);
     }
-
-    // CDKTN already created the directory and may have copied some files
-    // We need to re-copy with proper ignore handling
-    // Clear the staged directory first
-    if (fs.existsSync(stagedPath)) {
-      fs.rmSync(stagedPath, { recursive: true, force: true });
-    }
-
-    // Copy with proper Docker ignore mode
-    FileSystem.copyDirectory(sourcePath, stagedPath, {
-      exclude: props.exclude,
-      ignoreMode: IgnoreMode.DOCKER,
+    OUTPUT_BUNDLE_CACHE.set(this.cacheKey, {
+      sha256: digest,
+      storedPath,
+      outputType: result.outputType!,
     });
-  }
 
-  /**
-   * Return the path to the staged asset, relative to the stack's outdir.
-   * This is AWS CDK compatibility method.
-   *
-   * @param stack The stack
-   * @returns The relative path of the staged asset
-   */
-  public relativeStagedPath(stack: any): string {
-    // Get outdir from the stack's root (App)
-    const outdir = stack.node?.root?.outdir || stack.outdir;
-    return path.relative(outdir, this.absoluteStagedPath);
-  }
-
-  /**
-   * Deprecated alias for absoluteStagedPath
-   * @deprecated Use `absoluteStagedPath` instead
-   */
-  public get stagedPath(): string {
-    return this.absoluteStagedPath;
+    this.hash = digest;
+    return result;
   }
 }
 
-// Re-export AssetStagingProps from cdktn
-export type { AssetStagingProps } from "cdktn";
+/**
+ * Inputs needed to resolve an AWS-CDK-compatible SHA256 `assetHash` for a
+ * `TerraformAsset`.
+ */
+export interface Sha256AssetHashOptions {
+  readonly sourcePath: string;
+  readonly exclude?: string[];
+  readonly extraHash?: string;
+  readonly assetHash?: string;
+  readonly assetHashType?: AssetHashType;
+  readonly bundler?: IAssetBundler;
+}
+
+/**
+ * The `assetHash`/`assetHashType`/`bundler` to pass into a `TerraformAsset`,
+ * plus a `finalize` hook to call with the constructed asset once it exists
+ * (only does anything for `OUTPUT` hashing, where the real SHA256 hash isn't
+ * known until the bundler has actually run inside the `TerraformAsset`
+ * constructor).
+ */
+export interface ISha256AssetHashResolution {
+  readonly assetHash?: string;
+  readonly assetHashType: AssetHashType;
+  readonly bundler?: IAssetBundler;
+  finalize(asset: IAsset): void;
+}
+
+/**
+ * Validate props for AWS CDK compatibility.
+ */
+function validateProps(props: Sha256AssetHashOptions): void {
+  const hashType = props.assetHashType;
+  if (!hashType) {
+    return;
+  }
+  if (props.assetHash && hashType !== AssetHashType.CUSTOM) {
+    throw new Error(
+      `Cannot specify \`${hashType}\` for \`assetHashType\` when \`assetHash\` is specified. Use \`AssetHashType.CUSTOM\` or leave undefined.`,
+    );
+  }
+  if (hashType === AssetHashType.OUTPUT && !props.bundler) {
+    throw new Error(
+      "Cannot use `output` hash type when `bundler` is not specified.",
+    );
+  }
+}
+
+/**
+ * Resolve an AWS-CDK-compatible SHA256 `assetHash` (cdktn hashes with MD5 by
+ * default) for a `TerraformAsset`, ahead of constructing it.
+ */
+export function resolveSha256AssetHash(
+  props: Sha256AssetHashOptions,
+): ISha256AssetHashResolution {
+  validateProps(props);
+
+  const hashType =
+    props.assetHashType ??
+    (props.assetHash ? AssetHashType.CUSTOM : AssetHashType.SOURCE);
+
+  if (hashType === AssetHashType.OUTPUT && props.bundler) {
+    const sourcePath = path.resolve(props.sourcePath);
+    const cacheKey = sha256(
+      JSON.stringify({
+        sourcePath,
+        exclude: props.exclude,
+        extraHash: props.extraHash,
+        bundlerKey: props.bundler.bundlerKey,
+      }),
+    );
+    const capturing = new CapturingOutputBundler(props.bundler, cacheKey);
+    return {
+      assetHashType: AssetHashType.OUTPUT,
+      bundler: capturing,
+      finalize: (asset) => {
+        if (capturing.capturedHash) {
+          Object.defineProperty(asset, "assetHash", {
+            value: capturing.capturedHash,
+            writable: false,
+            enumerable: true,
+            configurable: true,
+          });
+        }
+      },
+    };
+  }
+
+  if (hashType === AssetHashType.CUSTOM) {
+    if (!props.assetHash) {
+      throw new Error(
+        "`assetHash` must be specified when `assetHashType` is set to `AssetHashType.CUSTOM`.",
+      );
+    }
+    return {
+      assetHash: sha256(props.assetHash),
+      assetHashType: AssetHashType.CUSTOM,
+      bundler: props.bundler,
+      finalize: () => {},
+    };
+  }
+
+  // SOURCE (default): hash the source for AWS CDK compatibility. The
+  // bundler (if any) still runs, deferred, when the asset stages.
+  const sourcePath = path.resolve(props.sourcePath);
+  const sha256Hash = FileSystem.fingerprint(sourcePath, {
+    exclude: props.exclude,
+    extraHash: props.extraHash,
+  });
+  return {
+    assetHash: sha256Hash,
+    assetHashType: AssetHashType.CUSTOM,
+    bundler: props.bundler,
+    finalize: () => {},
+  };
+}
